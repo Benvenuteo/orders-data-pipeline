@@ -3,7 +3,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $envPath = Join-Path $projectRoot '.env'
 if (Test-Path -LiteralPath $envPath) {
     Write-Host 'Existing .env preserved.'
-    exit 0
+    return
 }
 function New-RandomHex([int]$ByteCount) {
     $bytes = New-Object byte[] $ByteCount

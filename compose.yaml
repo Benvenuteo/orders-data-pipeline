@@ -1,7 +1,5 @@
 x-runtime: &runtime
   build: .
-  extra_hosts:
-    - "host.docker.internal:host-gateway"
   environment: &pipeline-environment
     API_URL: http://api:8000
     API_KEY: ${API_KEY:?Run python scripts/init_env.py first}

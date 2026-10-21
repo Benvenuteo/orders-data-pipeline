@@ -2,6 +2,8 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from orders_pipeline.models import OrderInput, OrderPatch
 from orders_pipeline.source import SourceStore
 
@@ -29,6 +31,9 @@ def test_seed_is_deterministic_and_cannot_overwrite(store, tmp_path):
     other.seed(12, 42)
     assert store.changes(0, 12, 20)["items"] == other.changes(0, 12, 20)["items"]
     assert store.boundary()["source_id"] != other.boundary()["source_id"]
+    with pytest.raises(FileExistsError):
+        store.seed(12, 99)
+    assert store.boundary()["high"] == 12
 
 
 def test_identity_and_data_survive_restart(store):

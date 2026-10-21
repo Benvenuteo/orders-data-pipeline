@@ -1,16 +1,23 @@
 name: Pipeline checks
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -22,10 +29,30 @@ jobs:
       - run: pip install --no-deps -e .
       - run: ruff check . && ruff format --check .
       - run: pytest -m 'not integration' --junitxml=reports/unit.xml
+      - name: Validate Windows scripts and secret initialization
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts/*.ps1 | ForEach-Object {
+            $parseErrors = $null
+            $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) { throw 'PowerShell syntax error' }
+          }
+          $temporaryProject = Join-Path $env:RUNNER_TEMP 'orders-env-test'
+          New-Item -ItemType Directory -Force (Join-Path $temporaryProject 'scripts') | Out-Null
+          Copy-Item scripts/init_env.ps1 (Join-Path $temporaryProject 'scripts/init_env.ps1')
+          & (Join-Path $temporaryProject 'scripts/init_env.ps1')
+          $before = Get-Content (Join-Path $temporaryProject '.env') -Raw
+          & (Join-Path $temporaryProject 'scripts/init_env.ps1')
+          $after = Get-Content (Join-Path $temporaryProject '.env') -Raw
+          if ($before -cne $after) { throw 'Existing .env was overwritten' }
+          if ($after -notmatch 'API_KEY=[a-f0-9]{48}') { throw 'API key generation failed' }
+          Write-Host 'PowerShell syntax and non-destructive initialization passed.'
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: unit-results
+          name: unit-results-${{ matrix.os }}
           path: reports/unit.xml
 
   sql-server:
@@ -57,20 +84,22 @@ jobs:
         env:
           RUN_SQL_TESTS: '0'
         run: |
+          docker rm --force sql-test
           python scripts/init_env.py
           docker compose config --quiet
           docker compose build
-          docker compose up -d --wait api
           export SQL_DATABASE=orders_compose_test
-          docker compose run --rm --no-deps -e SQL_SERVER=host.docker.internal,1433 bootstrap
+          docker compose up -d --wait sqlserver api
+          docker compose run --rm bootstrap
           mkdir -p reports && chmod 777 reports
-          docker compose run --rm --no-deps -e SQL_SERVER=host.docker.internal,1433 pipeline demo --output /reports/demo.json
+          docker compose run --rm pipeline demo --output /reports/demo.json
       - name: Collect Compose diagnostics
         if: always()
         run: |
           mkdir -p reports
           docker logs sql-test > reports/sql-server.log 2>&1 || true
           docker compose logs --no-color api > reports/compose-api.log 2>&1 || true
+          docker compose logs --no-color sqlserver > reports/compose-sql-server.log 2>&1 || true
       - uses: actions/upload-artifact@v6
         if: always()
         with:

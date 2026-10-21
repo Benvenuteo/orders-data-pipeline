@@ -39,7 +39,9 @@ administratora do przygotowania środowiska, ale sam pipeline korzysta z konta a
 
 ## GitHub Actions
 
-`unit` sprawdza formatowanie, lint i testy bez SQL. `sql-server` uruchamia
+`unit` sprawdza formatowanie, lint i testy bez SQL na Linux oraz Windows.
+Na Windows dodatkowo sprawdza składnię PowerShell i generowanie `.env` bez
+nadpisania istniejącej konfiguracji. `sql-server` uruchamia
 rzeczywisty SQL Server 2022 CU23, testy integracyjne oraz pełną demonstrację
 zbudowanego obrazu i API. Raporty JUnit oraz JSON demonstracji są załączone
 do uruchomienia workflow. Hasła CI są generowane losowo dopiero na jednorazowym
