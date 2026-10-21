@@ -1,0 +1,72 @@
+x-runtime: &runtime
+  build: .
+  environment: &pipeline-environment
+    API_URL: http://api:8000
+    API_KEY: ${API_KEY:?Run python scripts/init_env.py first}
+    SQL_SERVER: sqlserver,1433
+    SQL_DATABASE: ${SQL_DATABASE:-orders_warehouse}
+    SQL_USER: ${SQL_USER:-orders_app}
+    SQL_PASSWORD: ${SQL_PASSWORD:?Initialize .env first}
+    SQL_TRUST_CERTIFICATE: ${SQL_TRUST_CERTIFICATE:-true}
+    PAGE_SIZE: ${PAGE_SIZE:-500}
+    MAX_EVENTS: ${MAX_EVENTS:-100000}
+    HTTP_ATTEMPTS: ${HTTP_ATTEMPTS:-4}
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU23-ubuntu-22.04
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${SQL_ADMIN_PASSWORD:?Initialize .env first}
+    ports:
+      - "127.0.0.1:1433:1433"
+    volumes:
+      - sql_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "SQLCMDPASSWORD=\"$$MSSQL_SA_PASSWORD\" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q 'SELECT 1' > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  api:
+    build: .
+    entrypoint: ["uvicorn"]
+    command: ["orders_pipeline.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    environment:
+      API_KEY: ${API_KEY:?Initialize .env first}
+      SOURCE_DB: /data/source.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - source_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  bootstrap:
+    <<: *runtime
+    command: ["init-db"]
+    environment:
+      <<: *pipeline-environment
+      SQL_ADMIN_PASSWORD: ${SQL_ADMIN_PASSWORD:?Initialize .env first}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+  pipeline:
+    <<: *runtime
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - ./reports:/reports
+
+volumes:
+  sql_data:
+  source_data:
