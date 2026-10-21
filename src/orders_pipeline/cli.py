@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -19,7 +20,11 @@ class JsonFormatter(logging.Formatter):
     """Log operational metadata without HTTP headers, credentials or business payloads."""
 
     def format(self, record: logging.LogRecord) -> str:
-        data = {"level": record.levelname, "event": record.getMessage()}
+        data = {
+            "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
+            "level": record.levelname,
+            "event": record.getMessage(),
+        }
         for key in ("run_id", "error_code", "status", "checkpoint", "inserted", "updated"):
             if hasattr(record, key):
                 data[key] = getattr(record, key)
@@ -92,6 +97,14 @@ def demo(settings: Settings, target: SqlTarget, api: ApiClient, count: int) -> d
     }
 
 
+def _demo_count(value: str) -> int:
+    """Keep help output small while validating the demonstration dataset size."""
+    count = int(value)
+    if not 10 <= count <= 10_000:
+        raise argparse.ArgumentTypeError("Demo count must be between 10 and 10000")
+    return count
+
+
 def parser() -> argparse.ArgumentParser:
     """Expose explicit commands suitable for an operator and Windows Task Scheduler."""
     root = argparse.ArgumentParser(description="Reliable orders pipeline")
@@ -111,7 +124,7 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--cutover", action="store_true")
     check.add_argument("--output")
     demonstration = sub.add_parser("demo", help="Run an empty-environment acceptance scenario")
-    demonstration.add_argument("--count", type=int, default=1000, choices=range(10, 10001))
+    demonstration.add_argument("--count", type=_demo_count, default=1000)
     demonstration.add_argument("--output")
     source = sub.add_parser("source", help="Operate the synthetic shop")
     actions = source.add_subparsers(dest="action", required=True)

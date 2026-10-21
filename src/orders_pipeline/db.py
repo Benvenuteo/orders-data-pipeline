@@ -18,7 +18,7 @@ def connect(
     import mssql_python
 
     return mssql_python.connect(
-        settings.connection_string(admin=admin, master=master), autocommit=autocommit
+        settings.connection_string(admin=admin, master=master), autocommit=autocommit, timeout=10
     )
 
 

@@ -64,5 +64,5 @@ class Settings:
         return ";".join(f"{key}={_brace(value)}" for key, value in values.items()) + (
             ";Encrypt=yes;TrustServerCertificate="
             + ("yes" if self.sql_trust_certificate else "no")
-            + ";Connection Timeout=10;"
+            + ";"
         )
